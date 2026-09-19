@@ -3,70 +3,375 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#111827">
-<title>White Pack Admin</title>
+<title>White Pack — Admin (No Token)</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:Arial;background:#f5f6f8;color:#111827}
-header{background:#111827;color:white;padding:18px}.wrap{max-width:900px;margin:auto;padding:14px}
-h1{margin:0;font-size:23px}.sub{opacity:.75;margin-top:4px}
-.box{background:white;border-radius:16px;padding:16px;margin:14px 0;box-shadow:0 2px 12px #0001}
-label{font-weight:700;font-size:14px;display:block;margin:12px 0 6px}
-input,textarea,select,button{font:inherit}input,textarea,select{width:100%;padding:12px;border:1px solid #ddd;border-radius:11px;background:white}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f3f4f6;color:#111827}
+.wrap{max-width:850px;margin:auto;padding:14px}
+.panel{background:#fff;padding:16px;border-radius:16px;margin-bottom:14px;box-shadow:0 2px 10px #0000000b}
+h1{margin:0 0 8px;font-size:25px}
+h2{margin:0 0 10px}
+label{display:block;font-weight:700;margin:12px 0 5px}
+input,textarea,select{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:#fff}
+.filePicker{display:none}
+button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.photo{touch-action:manipulation}
 textarea{min-height:80px;resize:vertical}
-button{border:0;border-radius:11px;padding:12px 15px;font-weight:700;cursor:pointer}
-.primary{background:#111827;color:white}.danger{background:#fee2e2;color:#991b1b}.muted{background:#e5e7eb}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.item{border:1px solid #e5e7eb;border-radius:13px;padding:12px;margin-top:10px;display:flex;gap:12px;align-items:center}
-.item img{width:70px;height:70px;object-fit:contain;background:#f8fafc;border-radius:9px}
-.item .grow{flex:1}.small{font-size:12px;color:#6b7280}
-#file{display:none}.filebtn{display:block;text-align:center;background:#e5e7eb;padding:13px;border-radius:11px;font-weight:700}
-.status{padding:12px;border-radius:11px;background:#ecfdf5;color:#166534;display:none;margin-top:10px}
-@media(max-width:600px){.row{grid-template-columns:1fr}.item{align-items:flex-start}.item img{width:60px;height:60px}}
+.photo{height:210px;border:2px dashed #cbd5e1;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fafafa;cursor:pointer}
+.photo img{width:100%;height:100%;object-fit:contain;display:none}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:8px;font-size:15px;cursor:pointer}
+.primary{background:#111827;color:#fff}
+.secondary{background:#e5e7eb;color:#111827}
+.danger{background:#fee2e2;color:#991b1b}
+.edit{background:#dbeafe;color:#1e40af}
+.hint{color:#667085;font-size:14px;line-height:1.5}
+.ok{padding:12px;border-radius:10px;background:#ecfdf3;color:#166534;margin-top:10px;display:none}
+.item{display:flex;gap:10px;align-items:center;background:#f8fafc;padding:9px;border-radius:12px;margin:8px 0}
+.item img{width:70px;height:70px;object-fit:contain;border-radius:8px;background:#fff}
+.item div{flex:1;min-width:0}
+.small{font-size:12px;color:#667085}
+.note{background:#fff7ed;color:#9a3412;padding:12px;border-radius:10px;font-size:14px;line-height:1.45}
+.badge{display:inline-block;padding:5px 8px;border-radius:999px;background:#e5e7eb;font-size:12px;margin-top:5px}
+#imgViewer{display:none;position:fixed;inset:0;background:#000d;z-index:9999;align-items:center;justify-content:center;padding:16px}
+#imgViewer.show{display:flex}#imgViewer img{max-width:96vw;max-height:90vh;object-fit:contain;background:#fff;border-radius:12px}
+#imgViewer button{position:absolute;top:12px;right:16px;background:#fff;color:#111;border:0;border-radius:50%;width:44px;height:44px;font-size:26px}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>White Pack — Admin</h1><div class="sub">Phone-friendly catalogue editor</div></div></header>
-<main class="wrap">
-<div class="box">
-<h2>Add / Edit Product</h2>
-<label>Product name</label><input id="name" placeholder="Example: Kraft Bag 40">
-<label>Category</label><input id="category" list="categoryList" placeholder="Example: Paper Bags"><datalist id="categoryList"></datalist>
-<div class="row"><div><label>Price</label><input id="price" placeholder="2.50" inputmode="decimal"></div><div><label>Image</label><label for="file" class="filebtn">📷 Choose photo</label><input id="file" type="file" accept="image/*"></div></div>
-<label>Description</label><textarea id="description" placeholder="Size, quantity, specifications..."></textarea>
-<div id="preview"></div>
-<div class="actions"><button class="primary" id="add">Add Product</button><button class="muted" id="clear">Clear</button></div>
-<div id="status" class="status"></div>
+<div id="imgViewer" onclick="closeImgViewer()"><button onclick="event.stopPropagation();closeImgViewer()">×</button><img id="bigImg" alt=""></div>
+<div class="wrap">
+
+<div class="panel">
+  <h1>📦 White Pack — Phone Editor</h1>
+  <div class="hint">
+    <b>No GitHub token required.</b> Add or edit products on your phone, then download
+    <b>products.json</b> and upload that single file to your GitHub repository.
+    Product photos are compressed and stored inside the JSON file, so you do not need to upload an images folder.
+  </div>
 </div>
 
-<div class="box">
-<h2>Products</h2>
-<div class="actions"><button class="primary" id="download">⬇️ Download products.json</button><button class="muted" id="importBtn">📥 Import JSON</button><button class="danger" id="clearAll">Delete All</button></div>
-<input id="importFile" type="file" accept=".json,application/json" style="display:none">
-<div id="list"></div>
+<div class="panel">
+  <label>Business Name</label>
+  <input id="biz" value="White Pack">
+
+  <label>Product Photo</label>
+  <div class="photo" id="photoBox" role="button" tabindex="0" aria-label="Choose product photo">
+    <img id="preview">
+    <span id="pt">📷 Tap here to choose a product photo</span>
+  </div>
+  <input id="file" type="file" accept="image/*" class="filePicker">
+  <div class="hint" style="margin-top:6px">On Android, tap the photo box or the button and select Gallery/Photos.</div>
+
+  <label>Product Name</label>
+  <input id="name" placeholder="Example: Kraft Paper Bag">
+
+  <label>Description</label>
+  <textarea id="desc" placeholder="Size, quantity, material, etc."></textarea>
+
+  <label>Price (USD)</label>
+  <input id="price" inputmode="decimal" placeholder="12.50">
+
+  <label>Category</label>
+  <input id="cat" placeholder="Paper Bags">
+
+  <div class="row">
+    <button class="primary" id="addBtn" onclick="saveProduct()">➕ Add Product</button>
+    <button type="button" class="secondary" onclick="clearForm()">Clear</button>
+  </div>
+  <div id="status" class="ok"></div>
 </div>
-</main>
+
+<div class="panel">
+  <h2>Products <span id="count" class="badge">0</span></h2>
+  <div id="list"></div>
+  <div class="row">
+    <button class="primary" onclick="downloadJSON()">⬇️ Download products.json</button>
+    <button class="secondary" onclick="document.getElementById('importFile').click()">📥 Import products.json</button>
+    <input id="importFile" type="file" accept=".json,application/json" hidden>
+  </div>
+  <div class="note" style="margin-top:12px">
+    After downloading, upload <b>products.json</b> to the <b>whitepack-clients</b> repository
+    and replace the old file. Your customer catalogue will then use the updated products.
+  </div>
+</div>
+
+</div>
+
 <script>
-let data={businessName:"White Pack",products:[]},imageData="";
-const $=id=>document.getElementById(id);
-const save=()=>localStorage.setItem("whitepack_admin",JSON.stringify(data));
-function status(t){$("status").textContent=t;$("status").style.display="block";setTimeout(()=>$("status").style.display="none",2500)}
-function cats(){return [...new Set(data.products.map(p=>p.category).filter(Boolean))].sort()}
-function render(){
- $("categoryList").innerHTML=cats().map(c=>`<option value="${esc(c)}">`).join("");
- $("list").innerHTML=data.products.length?data.products.map((p,i)=>`<div class="item"><img src="${p.photo||""}" alt=""><div class="grow"><b>${esc(p.name)}</b><div class="small">${esc(p.category)} ${p.price!==""&&p.price!=null?"• $"+esc(p.price):""}</div></div><button class="danger" onclick="del(${i})">Delete</button></div>`).join(""):'<div class="small">No products yet.</div>';
+let data = JSON.parse(localStorage.getItem('wpNoTokenData') || '{"businessName":"White Pack","products":[]}');
+let photo = '';
+let editIndex = -1;
+
+const biz = document.getElementById('biz');
+const file = document.getElementById('file');
+const photoBox = document.getElementById('photoBox');
+const preview = document.getElementById('preview');
+const pt = document.getElementById('pt');
+const nameEl = document.getElementById('name');
+const desc = document.getElementById('desc');
+const price = document.getElementById('price');
+const cat = document.getElementById('cat');
+const list = document.getElementById('list');
+const count = document.getElementById('count');
+const status = document.getElementById('status');
+const addBtn = document.getElementById('addBtn');
+
+biz.value = data.businessName || 'White Pack';
+
+file.addEventListener('change', async function(e){
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  if(!f.type || !f.type.startsWith('image/')){
+    alert('Please choose an image file.');
+    file.value='';
+    return;
+  }
+  try {
+    show('⏳ Processing photo...');
+    photo = await compressImage(f, 700, 0.68);
+    preview.src = photo;
+    preview.style.display = 'block';
+    pt.style.display = 'none';
+    show('✅ Photo ready.');
+  } catch(err) {
+    console.error(err);
+    photo='';
+    preview.removeAttribute('src');
+    preview.style.display='none';
+    pt.style.display='block';
+    alert('Could not read this photo. Please try another JPG or PNG.');
+  }
+});
+
+photoBox.addEventListener('click', function(e){
+  if(e.target !== file) file.click();
+});
+
+photoBox.addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.key === ' '){
+    e.preventDefault();
+    file.click();
+  }
+});
+
+function compressImage(file,maxSize,quality){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=function(e){
+      const img=new Image();
+      img.onload=function(){
+        let w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+        if(!w||!h){reject(new Error('Invalid image'));return;}
+        const scale=Math.min(1,maxSize/Math.max(w,h));
+        w=Math.max(1,Math.round(w*scale)); h=Math.max(1,Math.round(h*scale));
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d',{alpha:false});
+        if(!ctx){reject(new Error('Canvas unavailable'));return;}
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+        let result=c.toDataURL('image/jpeg',quality);
+        if(result.length>900000) result=c.toDataURL('image/jpeg',0.52);
+        if(result.length>1300000) result=c.toDataURL('image/jpeg',0.40);
+        resolve(result);
+      };
+      img.onerror=()=>reject(new Error('Image decode failed'));
+      img.src=e.target.result;
+    };
+    r.onerror=()=>reject(new Error('File read failed'));
+    r.readAsDataURL(file);
+  });
 }
-function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
-$("file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{imageData=r.result;$("preview").innerHTML='<img src="'+imageData+'" style="max-width:140px;max-height:140px;margin-top:10px;border-radius:10px">'};r.readAsDataURL(f)}
-$("add").onclick=()=>{const n=$("name").value.trim(),c=$("category").value.trim();if(!n||!c){alert("Enter product name and category.");return}data.products.push({name:n,category:c,price:$("price").value.trim(),description:$("description").value.trim(),photo:imageData});save();render();clearForm();status("Product added on this phone.")}
-function clearForm(){["name","category","price","description"].forEach(id=>$(id).value="");imageData="";$("file").value="";$("preview").innerHTML=""}
-$("clear").onclick=clearForm;
-window.del=i=>{if(confirm("Delete this product?")){data.products.splice(i,1);save();render()}}
-$("download").onclick=()=>{const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="products.json";a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-$("importBtn").onclick=()=>$("importFile").click();
-$("importFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);data={businessName:x.businessName||"White Pack",products:Array.isArray(x)?x:(x.products||[])};save();render();status("JSON imported.")}catch{alert("Invalid JSON file.")}};r.readAsText(f)}
-$("clearAll").onclick=()=>{if(confirm("Delete ALL products from this admin?")){data.products=[];save();render()}}
-try{const x=JSON.parse(localStorage.getItem("whitepack_admin")||"null");if(x&&Array.isArray(x.products))data=x}catch{}
+
+function saveProduct(){
+  const n=nameEl.value.trim();
+  if(!n){alert('Enter a product name.');return;}
+  if(!photo && editIndex<0){alert('Choose a product photo.');return;}
+
+  data.businessName=biz.value.trim() || 'White Pack';
+  const product={
+    name:n,
+    description:desc.value.trim(),
+    price:price.value.replace(/[^0-9.]/g,''),
+    category:cat.value.trim() || 'Products',
+    photo: photo || data.products[editIndex].photo
+  };
+
+  const oldProducts=data.products.slice();
+
+  if(editIndex>=0) data.products[editIndex]=product;
+  else data.products.push(product);
+
+  if(!persist()){
+    data.products=oldProducts;
+    return;
+  }
+
+  show(editIndex>=0 ? '✅ Product updated.' : '✅ Product added.');
+  clearForm();
+  render();
+}
+
+function editProduct(i){
+  const p=data.products[i];
+  editIndex=i;
+  biz.value=data.businessName||'White Pack';
+  nameEl.value=p.name||'';
+  desc.value=p.description||'';
+  price.value=p.price||'';
+  cat.value=p.category||'Products';
+  photo=p.photo||'';
+  if(photo){preview.src=photo;preview.style.display='block';pt.style.display='none';}
+  addBtn.textContent='💾 Save Changes';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function del(i){
+  if(!confirm('Delete this product?')) return;
+  data.products.splice(i,1);
+  persist();
+  render();
+  show('Product deleted.');
+}
+
+function clearForm(){
+  editIndex=-1;
+  photo='';
+  nameEl.value='';
+  desc.value='';
+  price.value='';
+  cat.value='';
+  file.value='';
+  preview.src='';
+  preview.style.display='none';
+  pt.style.display='block';
+  addBtn.textContent='➕ Add Product';
+}
+
+function persist(){
+  try{
+    localStorage.setItem('wpNoTokenData',JSON.stringify(data));
+    return true;
+  }catch(err){
+    alert('Phone storage is full. Try a smaller photo or delete some products.');
+    return false;
+  }
+}
+
+
+let bulkSelectedFiles = [];
+
+document.getElementById('bulkFiles').addEventListener('change', function(e){
+  bulkSelectedFiles = Array.from(e.target.files || []);
+  document.getElementById('bulkPreview').textContent =
+    bulkSelectedFiles.length ? ('✅ ' + bulkSelectedFiles.length + ' photo(s) selected. They will match the product lines in order.') : '';
+});
+
+async function addBulkProducts(){
+  const rows = document.getElementById('bulkRows').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(!bulkSelectedFiles.length){ alert('Choose one or more product photos.'); return; }
+  if(!rows.length){ alert('Enter at least one product line.'); return; }
+  if(rows.length !== bulkSelectedFiles.length){
+    alert('The number of product lines must match the number of photos.\nPhotos: '+bulkSelectedFiles.length+'\nProducts: '+rows.length);
+    return;
+  }
+
+  const oldProducts = data.products.slice();
+  try{
+    show('⏳ Processing products...');
+    for(let i=0;i<rows.length;i++){
+      const parts = rows[i].split('|').map(x=>x.trim());
+      const n = parts[0] || '';
+      if(!n) throw new Error('Missing product name on line '+(i+1));
+      const ph = await compressImage(bulkSelectedFiles[i],700,0.68);
+      data.products.push({
+        name:n,
+        price:(parts[1]||'').replace(/[^0-9.]/g,''),
+        category:parts[2] || 'Products',
+        description:parts[3] || '',
+        photo:ph
+      });
+    }
+    if(!persist()){ data.products=oldProducts; return; }
+    render();
+    document.getElementById('bulkFiles').value='';
+    document.getElementById('bulkRows').value='';
+    document.getElementById('bulkPreview').textContent='';
+    bulkSelectedFiles=[];
+    show('✅ '+rows.length+' products added.');
+  }catch(err){
+    data.products=oldProducts;
+    console.error(err);
+    alert('Could not add the products. Check that each line is: Name | Price | Category | Description');
+  }
+}
+
+function render(){
+  count.textContent=data.products.length;
+  if(!data.products.length){
+    list.innerHTML='<div class="hint">No products yet. Add your first product above.</div>';
+    return;
+  }
+  list.innerHTML=data.products.map((p,i)=>`
+    <div class="item">
+      <img src="${p.photo||''}" alt="" onclick="openImgViewer(this.src)" style="cursor:pointer">
+      <div>
+        <b>${esc(p.name)}</b><br>
+        <span class="small">$${esc(p.price||'')} • ${esc(p.category||'Products')}</span>
+      </div>
+      <button class="edit" onclick="editProduct(${i})">Edit</button>
+      <button class="danger" onclick="del(${i})">Delete</button>
+    </div>
+  `).join('');
+}
+
+function downloadJSON(){
+  data.businessName=biz.value.trim()||'White Pack';
+  persist();
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='products.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  show('✅ products.json downloaded. Upload it to GitHub.');
+}
+
+document.getElementById('importFile').onchange=e=>{
+  const f=e.target.files[0];
+  if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!Array.isArray(d.products)) throw new Error('Invalid catalogue');
+      data={businessName:d.businessName||'White Pack',products:d.products};
+      biz.value=data.businessName;
+      persist();
+      render();
+      clearForm();
+      show('✅ Catalogue imported.');
+    }catch(err){alert('This is not a valid products.json file.');}
+  };
+  r.readAsText(f);
+};
+
+function show(t){
+  status.style.display='block';
+  status.textContent=t;
+  setTimeout(()=>status.style.display='none',3500);
+}
+
+function openImgViewer(src){document.getElementById('bigImg').src=src;document.getElementById('imgViewer').classList.add('show')}
+function closeImgViewer(){document.getElementById('imgViewer').classList.remove('show');document.getElementById('bigImg').src=''}
+function esc(s){
+  return String(s||'').replace(/[&<>"']/g,m=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+  }[m]));
+}
+
 render();
 </script>
-</body></html>
+</body>
+</html>
