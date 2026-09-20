@@ -1,5 +1,7 @@
 {
   "businessName": "White Pack",
+  "catalogueType": "wholesale",
+  "catalogueLabel": "WHOLESALE",
   "products": [
     {
       "name": "Transparent Naylon Shopping Bags",
