@@ -33,13 +33,9 @@ button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:
 .small{font-size:12px;color:#667085}
 .note{background:#fff7ed;color:#9a3412;padding:12px;border-radius:10px;font-size:14px;line-height:1.45}
 .badge{display:inline-block;padding:5px 8px;border-radius:999px;background:#e5e7eb;font-size:12px;margin-top:5px}
-#imgViewer{display:none;position:fixed;inset:0;background:#000d;z-index:9999;align-items:center;justify-content:center;padding:16px}
-#imgViewer.show{display:flex}#imgViewer img{max-width:96vw;max-height:90vh;object-fit:contain;background:#fff;border-radius:12px}
-#imgViewer button{position:absolute;top:12px;right:16px;background:#fff;color:#111;border:0;border-radius:50%;width:44px;height:44px;font-size:26px}
 </style>
 </head>
 <body>
-<div id="imgViewer" onclick="closeImgViewer()"><button onclick="event.stopPropagation();closeImgViewer()">×</button><img id="bigImg" alt=""></div>
 <div class="wrap">
 
 <div class="panel">
@@ -257,54 +253,6 @@ function persist(){
   }
 }
 
-
-let bulkSelectedFiles = [];
-
-document.getElementById('bulkFiles').addEventListener('change', function(e){
-  bulkSelectedFiles = Array.from(e.target.files || []);
-  document.getElementById('bulkPreview').textContent =
-    bulkSelectedFiles.length ? ('✅ ' + bulkSelectedFiles.length + ' photo(s) selected. They will match the product lines in order.') : '';
-});
-
-async function addBulkProducts(){
-  const rows = document.getElementById('bulkRows').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-  if(!bulkSelectedFiles.length){ alert('Choose one or more product photos.'); return; }
-  if(!rows.length){ alert('Enter at least one product line.'); return; }
-  if(rows.length !== bulkSelectedFiles.length){
-    alert('The number of product lines must match the number of photos.\nPhotos: '+bulkSelectedFiles.length+'\nProducts: '+rows.length);
-    return;
-  }
-
-  const oldProducts = data.products.slice();
-  try{
-    show('⏳ Processing products...');
-    for(let i=0;i<rows.length;i++){
-      const parts = rows[i].split('|').map(x=>x.trim());
-      const n = parts[0] || '';
-      if(!n) throw new Error('Missing product name on line '+(i+1));
-      const ph = await compressImage(bulkSelectedFiles[i],700,0.68);
-      data.products.push({
-        name:n,
-        price:(parts[1]||'').replace(/[^0-9.]/g,''),
-        category:parts[2] || 'Products',
-        description:parts[3] || '',
-        photo:ph
-      });
-    }
-    if(!persist()){ data.products=oldProducts; return; }
-    render();
-    document.getElementById('bulkFiles').value='';
-    document.getElementById('bulkRows').value='';
-    document.getElementById('bulkPreview').textContent='';
-    bulkSelectedFiles=[];
-    show('✅ '+rows.length+' products added.');
-  }catch(err){
-    data.products=oldProducts;
-    console.error(err);
-    alert('Could not add the products. Check that each line is: Name | Price | Category | Description');
-  }
-}
-
 function render(){
   count.textContent=data.products.length;
   if(!data.products.length){
@@ -313,7 +261,7 @@ function render(){
   }
   list.innerHTML=data.products.map((p,i)=>`
     <div class="item">
-      <img src="${p.photo||''}" alt="" onclick="openImgViewer(this.src)" style="cursor:pointer">
+      <img src="${p.photo||''}" alt="">
       <div>
         <b>${esc(p.name)}</b><br>
         <span class="small">$${esc(p.price||'')} • ${esc(p.category||'Products')}</span>
@@ -363,8 +311,6 @@ function show(t){
   setTimeout(()=>status.style.display='none',3500);
 }
 
-function openImgViewer(src){document.getElementById('bigImg').src=src;document.getElementById('imgViewer').classList.add('show')}
-function closeImgViewer(){document.getElementById('imgViewer').classList.remove('show');document.getElementById('bigImg').src=''}
 function esc(s){
   return String(s||'').replace(/[&<>"']/g,m=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
