@@ -32,6 +32,9 @@ button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:
 .item div{flex:1;min-width:0}
 .small{font-size:12px;color:#667085}
 .note{background:#fff7ed;color:#9a3412;padding:12px;border-radius:10px;font-size:14px;line-height:1.45}
+.costbox{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-top:12px}
+.costbox .row{align-items:end}
+.locked{background:#fef2f2;color:#991b1b;padding:9px;border-radius:9px;font-size:13px;margin-top:8px}
 .badge{display:inline-block;padding:5px 8px;border-radius:999px;background:#e5e7eb;font-size:12px;margin-top:5px}
 </style>
 </head>
@@ -42,19 +45,12 @@ button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:
   <h1>📦 White Pack — Phone Editor</h1>
   <div class="hint">
     <b>No GitHub token required.</b> Add or edit products on your phone, then download
-    the selected <b>WHOLESALE</b> or <b>RETAIL</b> JSON file and upload it to the matching customer site/repository.
+    <b>products.json</b> and upload that single file to your GitHub repository.
     Product photos are compressed and stored inside the JSON file, so you do not need to upload an images folder.
   </div>
 </div>
 
 <div class="panel">
-  <label>Catalogue Version</label>
-  <select id="catalogueType">
-    <option value="wholesale">🟦 WHOLESALE</option>
-    <option value="retail">🟩 RETAIL</option>
-  </select>
-  <div class="hint">Choose which catalogue you are preparing. The exported JSON will clearly identify it as WHOLESALE or RETAIL.</div>
-
   <label>Business Name</label>
   <input id="biz" value="White Pack">
 
@@ -72,8 +68,27 @@ button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:
   <label>Description</label>
   <textarea id="desc" placeholder="Size, quantity, material, etc."></textarea>
 
-  <label>Price (USD)</label>
+  <label>Price (USD) — Customer Price</label>
   <input id="price" inputmode="decimal" placeholder="12.50">
+
+  <div class="costbox">
+    <label>Cost Price (USD)</label>
+    <input id="costPrice" inputmode="decimal" placeholder="8.00">
+    <div class="hint">This value is hidden from normal customers. Set an admin password below before entering cost prices.</div>
+
+    <label style="margin-top:14px">🔐 Cost Price Admin Password</label>
+    <input id="costPassword" type="password" autocomplete="new-password"
+           placeholder="Create or enter your cost-price password">
+    <div class="row">
+      <button type="button" class="primary" onclick="setCostPassword()">🔑 Set / Change Password</button>
+      <button type="button" class="secondary" onclick="unlockCostPrices()">🔓 Unlock Cost Prices</button>
+    </div>
+    <div id="lockStatus" class="locked">🔒 Cost prices are locked.</div>
+    <div class="hint" style="margin-top:7px">
+      First time: enter a password of at least 4 characters and tap <b>Set / Change Password</b>.
+      Later, enter the password and tap <b>Unlock Cost Prices</b>.
+    </div>
+  </div>
 
   <label>Category</label>
   <input id="cat" placeholder="Paper Bags">
@@ -86,7 +101,7 @@ button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:
 </div>
 
 <div class="panel">
-  <h2>Products <span id="count" class="badge">0</span> <span id="typeBadge" class="badge">🟦 WHOLESALE</span></h2>
+  <h2>Products <span id="count" class="badge">0</span></h2>
   <div id="list"></div>
   <div class="row">
     <button class="primary" onclick="downloadJSON()">⬇️ Download products.json</button>
@@ -102,15 +117,13 @@ button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem('wpNoTokenData') || '{"businessName":"White Pack","catalogueType":"wholesale","catalogueLabel":"WHOLESALE","products":[]}');
-data.catalogueType = data.catalogueType || 'wholesale';
-data.catalogueLabel = data.catalogueType === 'retail' ? 'RETAIL' : 'WHOLESALE';
+let data = JSON.parse(localStorage.getItem('wpNoTokenData') || '{"businessName":"White Pack","products":[]}');
 let photo = '';
 let editIndex = -1;
+let costPassword = sessionStorage.getItem('wpCostPassword') || '';
+let costUnlocked = false;
 
 const biz = document.getElementById('biz');
-const catalogueType = document.getElementById('catalogueType');
-const typeBadge = document.getElementById('typeBadge');
 const file = document.getElementById('file');
 const photoBox = document.getElementById('photoBox');
 const preview = document.getElementById('preview');
@@ -118,6 +131,9 @@ const pt = document.getElementById('pt');
 const nameEl = document.getElementById('name');
 const desc = document.getElementById('desc');
 const price = document.getElementById('price');
+const costPrice = document.getElementById('costPrice');
+const costPasswordEl = document.getElementById('costPassword');
+const lockStatus = document.getElementById('lockStatus');
 const cat = document.getElementById('cat');
 const list = document.getElementById('list');
 const count = document.getElementById('count');
@@ -125,8 +141,26 @@ const status = document.getElementById('status');
 const addBtn = document.getElementById('addBtn');
 
 biz.value = data.businessName || 'White Pack';
-catalogueType.value = data.catalogueType || 'wholesale';
-updateTypeBadge();
+if(costPasswordEl) costPasswordEl.value='';
+if(lockStatus){
+  if(data.costPasswordHash){
+    lockStatus.className='locked';
+    lockStatus.style.display='block';
+    lockStatus.textContent='🔒 Cost prices are password protected.';
+  }else{
+    lockStatus.className='ok';
+    lockStatus.style.display='block';
+    lockStatus.textContent='⚠️ No password set yet. Create one above.';
+  }
+}
+if(costPassword && data.costPasswordHash) sha256Hex(costPassword).then(h=>{
+  if(h===data.costPasswordHash){
+    costUnlocked=true;
+    lockStatus.className='ok';
+    lockStatus.style.display='block';
+    lockStatus.textContent='🔓 Cost prices unlocked for this session.';
+  }
+});
 
 file.addEventListener('change', async function(e){
   const f = e.target.files && e.target.files[0];
@@ -191,14 +225,83 @@ function compressImage(file,maxSize,quality){
   });
 }
 
-function saveProduct(){
+async function sha256Hex(text){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function b64(bytes){return btoa(String.fromCharCode(...bytes));}
+function unb64(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0));}
+async function deriveKey(password,salt){
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:120000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function encryptCost(value,password,salt){
+  if(value===undefined||value===null||String(value).trim()==='') return '';
+  const key=await deriveKey(password,salt), iv=crypto.getRandomValues(new Uint8Array(12));
+  const enc=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(String(value)));
+  return {iv:b64(iv),data:b64(new Uint8Array(enc))};
+}
+async function decryptCost(obj,password,salt){
+  if(!obj||!obj.iv||!obj.data) return '';
+  try{
+    const key=await deriveKey(password,salt);
+    const dec=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(obj.iv)},key,unb64(obj.data));
+    return new TextDecoder().decode(dec);
+  }catch(e){return null;}
+}
+function ensureSalt(){
+  if(!data.costSalt) data.costSalt=b64(crypto.getRandomValues(new Uint8Array(16)));
+  return unb64(data.costSalt);
+}
+async function setCostPassword(){
+  const p=costPasswordEl.value.trim();
+  if(p.length<4){alert('Choose a password with at least 4 characters.');return;}
+  if(data.costPasswordHash && data.costPasswordHash!==await sha256Hex(p)){
+    alert('Enter the current cost-price password first, or use the current password before changing it.');
+    return;
+  }
+  costPassword=p;
+  data.costPasswordHash=await sha256Hex(p);
+  ensureSalt();
+  costUnlocked=true;
+  sessionStorage.setItem('wpCostPassword',p);
+  lockStatus.className='ok'; lockStatus.style.display='block';
+  lockStatus.textContent='🔓 Cost prices unlocked for this session.';
+  persist(); show('✅ Cost-price password saved.');
+}
+async function unlockCostPrices(){
+  const p=costPasswordEl.value.trim();
+  if(!data.costPasswordHash){alert('No cost-price password is set yet. Set one first.');return;}
+  if(await sha256Hex(p)!==data.costPasswordHash){alert('Wrong cost-price password.');return;}
+  costPassword=p; costUnlocked=true; sessionStorage.setItem('wpCostPassword',p);
+  lockStatus.className='ok'; lockStatus.style.display='block'; lockStatus.textContent='🔓 Cost prices unlocked for this session.';
+  if(editIndex>=0 && data.products[editIndex].costPriceEnc){
+    const v=await decryptCost(data.products[editIndex].costPriceEnc,costPassword,ensureSalt());
+    costPrice.value=v===null?'':v;
+  }
+  render(); show('🔓 Cost prices unlocked.');
+}
+async function prepareExistingCosts(){
+  if(!costPassword || !data.costPasswordHash || await sha256Hex(costPassword)!==data.costPasswordHash) return;
+  const salt=ensureSalt();
+  for(const p of data.products){
+    if(p.costPrice!==undefined){
+      p.costPriceEnc=await encryptCost(p.costPrice,costPassword,salt);
+      delete p.costPrice;
+    }
+  }
+}
+
+async function saveProduct(){
   const n=nameEl.value.trim();
   if(!n){alert('Enter a product name.');return;}
   if(!photo && editIndex<0){alert('Choose a product photo.');return;}
 
   data.businessName=biz.value.trim() || 'White Pack';
-  data.catalogueType=catalogueType.value;
-  data.catalogueLabel=data.catalogueType==='retail' ? 'RETAIL' : 'WHOLESALE';
+  if(costPrice.value.trim() && !costUnlocked){
+    alert('Unlock/set the cost-price password before entering a cost price.');
+    return;
+  }
   const product={
     name:n,
     description:desc.value.trim(),
@@ -206,6 +309,11 @@ function saveProduct(){
     category:cat.value.trim() || 'Products',
     photo: photo || data.products[editIndex].photo
   };
+  if(costPrice.value.trim() && costUnlocked){
+    product.costPriceEnc=await encryptCost(costPrice.value.replace(/[^0-9.]/g,''),costPassword,ensureSalt());
+  } else if(editIndex>=0 && data.products[editIndex].costPriceEnc){
+    product.costPriceEnc=data.products[editIndex].costPriceEnc;
+  }
 
   const oldProducts=data.products.slice();
 
@@ -222,15 +330,15 @@ function saveProduct(){
   render();
 }
 
-function editProduct(i){
+async function editProduct(i){
   const p=data.products[i];
   editIndex=i;
   biz.value=data.businessName||'White Pack';
-  catalogueType.value=data.catalogueType||'wholesale';
-  updateTypeBadge();
   nameEl.value=p.name||'';
   desc.value=p.description||'';
   price.value=p.price||'';
+  costPrice.value='';
+  if(p.costPriceEnc && costUnlocked) costPrice.value=(await decryptCost(p.costPriceEnc,costPassword,ensureSalt()))||'';
   cat.value=p.category||'Products';
   photo=p.photo||'';
   if(photo){preview.src=photo;preview.style.display='block';pt.style.display='none';}
@@ -252,25 +360,13 @@ function clearForm(){
   nameEl.value='';
   desc.value='';
   price.value='';
+  costPrice.value='';
   cat.value='';
   file.value='';
   preview.src='';
   preview.style.display='none';
   pt.style.display='block';
   addBtn.textContent='➕ Add Product';
-}
-
-catalogueType.addEventListener('change', function(){
-  data.catalogueType=this.value;
-  data.catalogueLabel=this.value==='retail' ? 'RETAIL' : 'WHOLESALE';
-  persist();
-  updateTypeBadge();
-  show('Catalogue set to '+data.catalogueLabel+'.');
-});
-
-function updateTypeBadge(){
-  const retail = (catalogueType.value === 'retail');
-  typeBadge.textContent = retail ? '🟩 RETAIL' : '🟦 WHOLESALE';
 }
 
 function persist(){
@@ -294,7 +390,7 @@ function render(){
       <img src="${p.photo||''}" alt="">
       <div>
         <b>${esc(p.name)}</b><br>
-        <span class="small">$${esc(p.price||'')} • ${esc(p.category||'Products')}</span>
+        <span class="small">$${esc(p.price||'')} • ${esc(p.category||'Products')}${costUnlocked&&p.costPriceEnc?' • 🔐 cost saved':''}</span>
       </div>
       <button class="edit" onclick="editProduct(${i})">Edit</button>
       <button class="danger" onclick="del(${i})">Delete</button>
@@ -302,26 +398,19 @@ function render(){
   `).join('');
 }
 
-function downloadJSON(){
+async function downloadJSON(){
   data.businessName=biz.value.trim()||'White Pack';
-  data.catalogueType=catalogueType.value;
-  data.catalogueLabel=data.catalogueType==='retail' ? 'RETAIL' : 'WHOLESALE';
+  await prepareExistingCosts();
   persist();
-  const exportData = {
-    businessName: data.businessName,
-    catalogueType: data.catalogueType,
-    catalogueLabel: data.catalogueLabel,
-    products: data.products
-  };
-  const blob=new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=data.catalogueType==='retail' ? 'products-retail.json' : 'products-wholesale.json';
+  a.download='products.json';
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  show('✅ '+data.catalogueLabel+' JSON downloaded.');
+  show('✅ products.json downloaded. Upload it to GitHub.');
 }
 
 document.getElementById('importFile').onchange=e=>{
@@ -332,15 +421,8 @@ document.getElementById('importFile').onchange=e=>{
     try{
       const d=JSON.parse(r.result);
       if(!Array.isArray(d.products)) throw new Error('Invalid catalogue');
-      data={
-        businessName:d.businessName||'White Pack',
-        catalogueType:d.catalogueType || (d.catalogueLabel==='RETAIL' ? 'retail' : 'wholesale'),
-        catalogueLabel:d.catalogueLabel || (d.catalogueType==='retail' ? 'RETAIL' : 'WHOLESALE'),
-        products:d.products
-      };
+      data={businessName:d.businessName||'White Pack',products:d.products,costPasswordHash:d.costPasswordHash||'',costSalt:d.costSalt||''};
       biz.value=data.businessName;
-      catalogueType.value=data.catalogueType;
-      updateTypeBadge();
       persist();
       render();
       clearForm();

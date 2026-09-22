@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#111827">
-<title>White Pack - Wholesale Clients</title>
+<title>White Pack Catalogue</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#111827}
@@ -25,6 +25,10 @@ h1{margin:0;font-size:24px}.sub{opacity:.75;margin-top:4px;font-size:14px}
 .product img{width:100%;aspect-ratio:1;object-fit:contain;display:block;background:#fff}
 .body{padding:12px}.desc{color:#596273;font-size:13px;line-height:1.4;margin-top:5px}.price{font-size:20px;font-weight:900;margin-top:9px}
 .empty{text-align:center;padding:45px 20px;color:#6b7280;background:#fff;border-radius:16px}
+.costAccess{display:flex;gap:8px;margin:10px 0 12px}
+.costAccess input{flex:1;padding:12px;border:1px solid #ddd;border-radius:12px;font-size:16px}
+.costAccess button{border:0;border-radius:12px;padding:12px 14px;background:#111827;color:#fff;font-weight:800}
+.costState{font-size:12px;color:#6b7280;margin:4px 0 10px}
 @media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr)}}
 
 /* Shopping cart */
@@ -47,15 +51,17 @@ h1{margin:0;font-size:24px}.sub{opacity:.75;margin-top:4px;font-size:14px}
 .carttotal{font-size:20px;font-weight:900;text-align:right;margin:15px 0}
 .sendwa{width:100%;border:0;border-radius:13px;padding:14px;background:#16a34a;color:#fff;font-size:17px;font-weight:900}
 .cartempty{text-align:center;color:#6b7280;padding:30px 10px}
-
-.client-badge{display:inline-block;margin-top:9px;padding:7px 11px;border-radius:999px;background:#fff;color:#111827;font-size:12px;font-weight:900}
-
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1 id="business">White Pack</h1><div class="sub">📦 Wholesale Clients Catalogue</div><div class="client-badge">Wholesale Clients</div></div></header>
+<header><div class="wrap"><h1 id="business">White Pack</h1><div class="sub">Product Catalogue</div></div></header>
 <main class="wrap">
 <div class="toolbar"><input id="search" class="search" autocomplete="off" placeholder="🔍 Search products or categories..."></div>
+<div class="costAccess">
+  <input id="costPassword" type="password" autocomplete="off" placeholder="🔐 Admin password">
+  <button id="unlockCost">Admin</button>
+</div>
+<div id="costState" class="costState">Normal customer prices are shown.</div>
 <section id="categories"><div class="title">Choose a Category</div><div id="categoryGrid" class="grid"></div></section>
 <section id="products"><button id="back" class="back">← All Categories</button><div id="categoryTitle" class="title"></div><div id="productGrid" class="grid"></div></section>
 </main>
@@ -72,6 +78,9 @@ h1{margin:0;font-size:24px}.sub{opacity:.75;margin-top:4px;font-size:14px}
 <script>
 let products=[],active="";
 let cart=[];
+let costPassword='';
+let costUnlocked=false;
+let catalogueData={};
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
@@ -93,16 +102,45 @@ function renderCats(){
 
 function openCat(c){active=c;$("search").value="";$("categories").style.display="none";$("products").style.display="block";$("categoryTitle").textContent=c;renderProducts();scrollTo(0,0)}
 
-function renderProducts(){
+function unb64(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0));}
+async function deriveKey(password,salt){
+ const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveKey']);
+ return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:120000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['decrypt']);
+}
+async function sha256Hex(text){
+ const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));
+ return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function decryptCost(obj){
+ if(!obj||!obj.iv||!obj.data||!catalogueData.costSalt||!costPassword)return null;
+ try{
+  const key=await deriveKey(costPassword,unb64(catalogueData.costSalt));
+  const dec=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(obj.iv)},key,unb64(obj.data));
+  return new TextDecoder().decode(dec);
+ }catch(e){return null;}
+}
+async function unlockCosts(){
+ const p=$("costPassword").value.trim();
+ if(!p){alert('Enter the cost-price password.');return;}
+ if(!catalogueData.costPasswordHash){alert('This catalogue does not have cost-price protection configured.');return;}
+ if(await sha256Hex(p)!==catalogueData.costPasswordHash){alert('Wrong cost-price password.');return;}
+ costPassword=p; costUnlocked=true;
+ $("costState").textContent='🔓 Admin mode unlocked.';
+ renderProducts();
+}
+
+async function renderProducts(){
  const q=$("search").value.toLowerCase().trim();
  const a=products.filter(p=>String(p.category||"").trim()===active&&`${p.name||""} ${p.description||""}`.toLowerCase().includes(q));
- $("productGrid").innerHTML=a.length?a.map((p,i)=>`
+ const costs=costUnlocked?await Promise.all(a.map(p=>decryptCost(p.costPriceEnc))):a.map(()=>null);
+ $("productGrid").innerHTML=a.length?a.map((p,i)=>{ const cv=costs[i]; return `
  <article class="product">
   <img src="${esc(p.photo||"")}" loading="lazy" alt="${esc(p.name)}">
   <div class="body">
    <div class="name">${esc(p.name)}</div>
    ${p.description?`<div class="desc">${esc(p.description)}</div>`:""}
    ${p.price!==undefined&&p.price!==""?`<div class="price">$${esc(String(p.price).replace(/^\$/,""))}</div>`:""}
+   ${costUnlocked&&cv!==null?`<div class="price" style="font-size:14px;color:#b45309">Admin Price: $${esc(String(cv).replace(/^\$/,""))}</div>`:""}
    <div class="qtyrow">
     <button class="qtybtn" onclick="changeQty(${i},-1)">−</button>
     <div class="qty" id="q_${i}">1</div>
@@ -110,7 +148,7 @@ function renderProducts(){
    </div>
    <button class="addbtn" onclick="addToCart(${i})">🛒 Add to Order</button>
   </div>
- </article>`).join(""):'<div class="empty">No products found.</div>';
+ </article>`}).join(""):'<div class="empty">No products found.</div>';
 }
 
 function changeQty(i,n){
@@ -170,9 +208,10 @@ $("sendWhatsApp").onclick=()=>{
  window.open("https://wa.me/96181085811?text="+msg,"_blank");
 };
 
+$("unlockCost").onclick=unlockCosts;
 $("search").oninput=()=>{$("products").style.display==="block"?renderProducts():renderCats()};
 $("back").onclick=()=>{active="";$("search").value="";renderCats();scrollTo(0,0)};
 renderCart();
-fetch("products-wholesale.json?"+Date.now(),{cache:"no-store"}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(d=>{products=Array.isArray(d)?d:(d.products||[]);$("business").textContent=d.businessName||"White Pack";document.title=d.businessName||"Catalogue";renderCats()}).catch(()=>{$("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable.<br><br>Make sure <b>products-wholesale.json</b> is in the same GitHub folder.</div>'});
+fetch("products.json?"+Date.now(),{cache:"no-store"}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(d=>{catalogueData=d||{}; products=Array.isArray(d)?d:(d.products||[]);$("business").textContent=d.businessName||"White Pack";document.title=d.businessName||"Catalogue";renderCats()}).catch(()=>{$("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable.<br><br>Make sure <b>products.json</b> is in the same GitHub folder.</div>'});
 </script>
 </body></html>
