@@ -21,6 +21,7 @@ button{padding:12px 15px;border:0;border-radius:10px;font-weight:700;margin-top:
 <div class="row">
 <button class="primary" onclick="downloadPublic()">⬇️ Download public products.json</button>
 <button class="secondary" onclick="$('importFile').click()">📥 Import products.json</button>
+<button class="danger" onclick="removeDuplicates()">🧹 Remove Duplicates</button>
 <input id="importFile" type="file" accept=".json,application/json" hidden>
 </div>
 <div id="importStatus"></div>
@@ -49,36 +50,182 @@ async function importProductsJSON(file){
   try{
     el.className="ok"; el.textContent="⏳ Reading products.json...";
     const d=JSON.parse(await file.text());
-    if(!d||!Array.isArray(d.products))throw new Error("Invalid products.json: products array not found.");
-    if(!d.products.length)throw new Error("The file contains no products.");
+    if(!d || !Array.isArray(d.products)) throw new Error("Invalid products.json: products array not found.");
+    if(!d.products.length) throw new Error("The file contains no products.");
+
+    const norm=v=>String(v??"").toLowerCase().trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
+    const key=(name,cat)=>norm(name)+"||"+norm(cat||"Products");
+
+    const byId=new Map();
+    const byBarcode=new Map();
+    const byCode=new Map();
+    const byNameCat=new Map();
+
+    products.forEach(p=>{
+      if(p.id) byId.set(String(p.id),p);
+      if(p.barcode) byBarcode.set(norm(p.barcode),p);
+      if(p.code) byCode.set(norm(p.code),p);
+      byNameCat.set(key(p.name,p.category),p);
+    });
+
     let added=0,updated=0,failed=0;
+
     for(let i=0;i<d.products.length;i++){
       const old=d.products[i]||{};
-      const p={
-        name:String(old.name??"").trim(),
+      const name=String(old.name??"").trim();
+      const category=String(old.category??"Products").trim()||"Products";
+      if(!name){failed++;continue;}
+
+      const existing=(old.id&&byId.get(String(old.id))) ||
+        (old.barcode&&byBarcode.get(norm(old.barcode))) ||
+        (old.code&&byCode.get(norm(old.code))) ||
+        byNameCat.get(key(name,category));
+
+      const p={...old,
+        name,
         description:String(old.description??"").trim(),
         price:String(old.price??"").replace(/[^0-9.]/g,""),
         costPrice:String(old.costPrice??"").replace(/[^0-9.]/g,""),
-        category:String(old.category??"Products").trim()||"Products",
-        photo:String(old.photo??""),
-        barcode:String(old.barcode??"").trim(),
-        code:String(old.code??"").trim()
+        category,
+        photo:String(old.photo??"")
       };
-      if(!p.name){failed++;continue;}
-      const existing=old.id?products.find(x=>String(x.id)===String(old.id)):null;
+
+      if(old.barcode!==undefined)p.barcode=String(old.barcode).trim();
+      if(old.code!==undefined)p.code=String(old.code).trim();
       if(existing)p.id=existing.id;
+
       try{
-        await api("/api/admin/products",{method:existing?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({businessName:String(d.businessName||$("biz").value||"White Pack").trim()||"White Pack",product:p})});
-        existing?updated++:added++;
-      }catch(e){failed++}
+        const result=await api("/api/admin/products",{
+          method:existing?"PUT":"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            businessName:String(d.businessName||$("biz").value||"White Pack").trim()||"White Pack",
+            product:p
+          })
+        });
+
+        const saved=result.product||p;
+        if(saved.id)byId.set(String(saved.id),saved);
+        if(saved.barcode)byBarcode.set(norm(saved.barcode),saved);
+        if(saved.code)byCode.set(norm(saved.code),saved);
+        byNameCat.set(key(saved.name,saved.category),saved);
+
+        if(existing)updated++;else added++;
+      }catch(e){failed++;}
+
       el.textContent=`⏳ Importing ${i+1} of ${d.products.length}... Added: ${added}, Updated: ${updated}, Failed: ${failed}`;
     }
+
     await loadAdmin();
     el.className=failed?"err":"ok";
     el.textContent=`✅ Import finished. Added: ${added} • Updated: ${updated} • Failed: ${failed}`;
-  }catch(e){el.className="err";el.textContent="❌ Import failed: "+(e.message||"Invalid file.")}
+  }catch(e){
+    el.className="err";
+    el.textContent="❌ Import failed: "+(e.message||"Invalid file.");
+  }
 }
 $("importFile").addEventListener("change",async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;await importProductsJSON(f);e.target.value=""});
+
+
+/* DUPLICATE CLEANUP
+   Removes only duplicate records that have the same strong identity:
+   - same ID, or
+   - same barcode, or
+   - same code, or
+   - same name + category + description + price
+
+   This deliberately does NOT treat name + category alone as a duplicate,
+   so legitimate size/quantity/price variants are preserved.
+*/
+async function removeDuplicates(){
+  if(!products.length){
+    alert("No products loaded.");
+    return;
+  }
+
+  const ok=confirm(
+    "This will scan the Cloudflare catalogue and permanently delete duplicate product records.\n\n" +
+    "Different variants with different descriptions or prices will be kept.\n\nContinue?"
+  );
+  if(!ok)return;
+
+  const statusEl=$("importStatus");
+  statusEl.className="ok";
+  statusEl.textContent="⏳ Scanning products for exact duplicates...";
+
+  const norm=v=>String(v??"").toLowerCase().trim()
+    .replace(/\s+/g," ")
+    .replace(/[\u200B-\u200D\uFEFF]/g,"");
+
+  const exactKey=p=>[
+    norm(p.name),
+    norm(p.category||"Products"),
+    norm(p.description),
+    norm(p.price)
+  ].join("||");
+
+  const seenId=new Set();
+  const seenBarcode=new Set();
+  const seenCode=new Set();
+  const seenExact=new Set();
+  const duplicateIds=new Set();
+
+  for(const p of products){
+    let duplicate=false;
+
+    if(p.id){
+      const k=String(p.id);
+      if(seenId.has(k)) duplicate=true;
+      else seenId.add(k);
+    }
+
+    if(!duplicate && p.barcode){
+      const k=norm(p.barcode);
+      if(k && seenBarcode.has(k)) duplicate=true;
+      else if(k) seenBarcode.add(k);
+    }
+
+    if(!duplicate && p.code){
+      const k=norm(p.code);
+      if(k && seenCode.has(k)) duplicate=true;
+      else if(k) seenCode.add(k);
+    }
+
+    if(!duplicate){
+      const k=exactKey(p);
+      if(seenExact.has(k)) duplicate=true;
+      else seenExact.add(k);
+    }
+
+    if(duplicate && p.id) duplicateIds.add(String(p.id));
+  }
+
+  if(!duplicateIds.size){
+    statusEl.textContent="✅ No exact duplicate products found in the Cloudflare catalogue.";
+    return;
+  }
+
+  statusEl.textContent=`⏳ Found ${duplicateIds.size} exact duplicate record(s). Deleting...`;
+
+  let deleted=0, failed=0;
+
+  for(const id of duplicateIds){
+    try{
+      await api("/api/admin/products/"+encodeURIComponent(id),{method:"DELETE"});
+      deleted++;
+      statusEl.textContent=`⏳ Removing duplicates... ${deleted}/${duplicateIds.size}`;
+    }catch(e){
+      failed++;
+    }
+  }
+
+  await loadAdmin();
+
+  statusEl.className=failed?"err":"ok";
+  statusEl.textContent=failed
+    ? `⚠️ Cleanup finished. Deleted: ${deleted} • Failed: ${failed}`
+    : `✅ Duplicate cleanup finished. Deleted: ${deleted} • Products remaining: ${products.length}`;
+}
 
 async function downloadPublic(){const d=await api("/api/admin/public-export");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:"application/json"}));a.download="products.json";a.click()}
 function show(t,e=false){$("status").className=e?"err":"ok";$("status").textContent=t}
