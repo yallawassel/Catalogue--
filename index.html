@@ -50,18 +50,18 @@ const API_URL="https://whitepack-api.chidiacch.workers.dev";
 let products=[],active="",cart=[];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
-const cats=()=>[...new Set(products.map(p=>String(p.category||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+const catOrder=c=>{const n=Number(products.find(p=>String(p.category||"").trim()===String(c).trim()&&p.categoryOrder!==undefined)?.categoryOrder);return Number.isFinite(n)?n:999999};const prodOrder=p=>{const n=Number(p.sortOrder);return Number.isFinite(n)?n:999999};const cats=()=>[...new Set(products.map(p=>String(p.category||"").trim()).filter(Boolean))].sort((a,b)=>catOrder(a)-catOrder(b)||a.localeCompare(b));
 const photo=c=>products.find(p=>String(p.category||"").trim()===c&&p.photo)?.photo||"";
 function renderCats(){
  $("categories").style.display="block";$("products").style.display="none";const q=$("search").value.toLowerCase().trim();
- const html=cats().map(c=>{const items=products.filter(p=>String(p.category||"").trim()===c);if(q&&!(`${c} ${items.map(p=>p.name+" "+(p.description||"")).join(" ")}`.toLowerCase().includes(q)))return"";
+ const html=cats().map(c=>{const items=products.filter(p=>String(p.category||"").trim()===c).sort((a,b)=>prodOrder(a)-prodOrder(b));if(q&&!(`${c} ${items.map(p=>p.name+" "+(p.description||"")).join(" ")}`.toLowerCase().includes(q)))return"";
  const im=photo(c);return `<button class="category" data-c="${esc(c)}">${im?`<img src="${esc(im)}" loading="lazy">`:`<div class="placeholder">📦</div>`}<div class="info"><div class="name">${esc(c)}</div><div class="count">${items.length} product${items.length===1?"":"s"}</div></div></button>`}).join("");
  $("categoryGrid").innerHTML=html||'<div class="empty">No categories found.</div>';
  document.querySelectorAll(".category").forEach(b=>b.onclick=()=>openCat(b.dataset.c));
 }
 function openCat(c){active=c;$("search").value="";$("categories").style.display="none";$("products").style.display="block";$("categoryTitle").textContent=c;renderProducts();scrollTo(0,0)}
 function renderProducts(){
- const q=$("search").value.toLowerCase().trim(),a=products.filter(p=>String(p.category||"").trim()===active&&`${p.name||""} ${p.description||""}`.toLowerCase().includes(q));
+ const q=$("search").value.toLowerCase().trim(),a=products.filter(p=>String(p.category||"").trim()===active&&`${p.name||""} ${p.description||""}`.toLowerCase().includes(q)).sort((a,b)=>prodOrder(a)-prodOrder(b));
  $("productGrid").innerHTML=a.length?a.map((p,i)=>`<article class="product"><img src="${esc(p.photo||"")}" loading="lazy" alt="${esc(p.name)}"><div class="body"><div class="name">${esc(p.name)}</div>${p.description?`<div class="desc">${esc(p.description)}</div>`:""}${p.price!==undefined&&p.price!==""?`<div class="price">$${esc(String(p.price).replace(/^\$/,""))}</div>`:""}<div class="qtyrow"><button class="qtybtn" onclick="changeQty(${i},-1)">−</button><div class="qty" id="q_${i}">1</div><button class="qtybtn" onclick="changeQty(${i},1)">+</button></div><button class="addbtn" onclick="addToCart(${i})">🛒 Add to Order</button></div></article>`).join(""):'<div class="empty">No products found.</div>';
 }
 function changeQty(i,n){const el=$("q_"+i);el.textContent=Math.max(1,(parseInt(el.textContent)||1)+n)}
