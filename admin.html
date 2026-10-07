@@ -54,18 +54,23 @@ async function importProductsJSON(file){
     if(!d.products.length) throw new Error("The file contains no products.");
 
     const norm=v=>String(v??"").toLowerCase().trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
-    const key=(name,cat)=>norm(name)+"||"+norm(cat||"Products");
+    const fullKey=(p)=>[
+      norm(p.name),
+      norm(p.category||"Products"),
+      norm(p.description),
+      norm(p.price)
+    ].join("||");
 
     const byId=new Map();
     const byBarcode=new Map();
     const byCode=new Map();
-    const byNameCat=new Map();
+    const byFull=new Map();
 
     products.forEach(p=>{
       if(p.id) byId.set(String(p.id),p);
       if(p.barcode) byBarcode.set(norm(p.barcode),p);
       if(p.code) byCode.set(norm(p.code),p);
-      byNameCat.set(key(p.name,p.category),p);
+      byFull.set(fullKey(p),p);
     });
 
     let added=0,updated=0,failed=0;
@@ -76,10 +81,18 @@ async function importProductsJSON(file){
       const category=String(old.category??"Products").trim()||"Products";
       if(!name){failed++;continue;}
 
+      const incomingForMatch={
+        ...old,
+        name,
+        category,
+        description:String(old.description??"").trim(),
+        price:String(old.price??"").replace(/[^0-9.]/g,"")
+      };
+
       const existing=(old.id&&byId.get(String(old.id))) ||
         (old.barcode&&byBarcode.get(norm(old.barcode))) ||
         (old.code&&byCode.get(norm(old.code))) ||
-        byNameCat.get(key(name,category));
+        byFull.get(fullKey(incomingForMatch));
 
       const p={...old,
         name,
@@ -108,7 +121,7 @@ async function importProductsJSON(file){
         if(saved.id)byId.set(String(saved.id),saved);
         if(saved.barcode)byBarcode.set(norm(saved.barcode),saved);
         if(saved.code)byCode.set(norm(saved.code),saved);
-        byNameCat.set(key(saved.name,saved.category),saved);
+        byFull.set(fullKey(saved),saved);
 
         if(existing)updated++;else added++;
       }catch(e){failed++;}

@@ -74,7 +74,20 @@ $("cartBar").onclick=()=>{$("cartModal").classList.add("open");renderCart()};$("
 $("cartModal").onclick=e=>{if(e.target===$("cartModal"))$("cartModal").classList.remove("open")};
 $("sendWhatsApp").onclick=()=>{if(!cart.length){alert("Please add products first.");return}let msg="Hello White Pack, I would like to place this order:%0A%0A";cart.forEach((x,i)=>{const price=x.p.price!==undefined&&x.p.price!==""?` - $${String(x.p.price).replace(/^\$/,"")}`:"";msg+=`${i+1}. ${x.p.name} - Qty: ${x.qty}${price}%0A`});const total=cart.reduce((s,x)=>s+(parseFloat(String(x.p.price??"").replace(/[^0-9.-]/g,""))||0)*x.qty,0);if(total>0)msg+=`%0ATotal: $${total.toFixed(2)}`;window.open("https://wa.me/96181085811?text="+msg,"_blank")};
 $("search").oninput=()=>{$("products").style.display==="block"?renderProducts():renderCats()};$("back").onclick=()=>{active="";$("search").value="";renderCats();scrollTo(0,0)};
-async function load(){try{const r=await fetch(API_URL+"/api/products",{cache:"no-store"});if(!r.ok)throw 0;const d=await r.json();products=d.products||[];$("business").textContent=d.businessName||"White Pack";document.title=d.businessName||"Catalogue";renderCats()}catch(e){$("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable. Check the API URL and Worker deployment.</div>'}}
+async function load(){try{const r=await fetch(API_URL+"/api/products",{cache:"no-store"});if(!r.ok)throw 0;const d=await r.json();
+    const raw=Array.isArray(d.products)?d.products:[];
+    const seen=new Set();
+    const norm=v=>String(v??"").toLowerCase().trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
+    products=raw.filter(p=>{
+      const key=p.id ? "id:"+String(p.id) :
+        p.barcode ? "barcode:"+norm(p.barcode) :
+        p.code ? "code:"+norm(p.code) :
+        "full:"+norm(p.name)+"||"+norm(p.category||"Products")+"||"+norm(p.description)+"||"+norm(p.price);
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    $("business").textContent=d.businessName||"White Pack";document.title=d.businessName||"Catalogue";renderCats()}catch(e){$("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable. Check the API URL and Worker deployment.</div>'}}
 renderCart();load();
 </script>
 </body></html>
