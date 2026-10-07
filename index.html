@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>White Pack Catalogue</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="apple-touch-icon" href="logo.png">
+<meta name="description" content="White Pack Product Catalogue - Where Quality Meets Affordability">
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f5f6f8;color:#111827}
-header{background:#111827;color:#fff;padding:18px 14px;position:sticky;top:0;z-index:20}
+header{background:#111827;color:#fff;padding:10px 14px;position:sticky;top:0;z-index:20}.brand{display:flex;align-items:center;gap:12px}.site-logo{width:58px;height:58px;object-fit:contain;border-radius:50%;background:#fff}
 .wrap{max-width:1100px;margin:auto;padding:12px}.sub{opacity:.75;margin-top:4px;font-size:14px}
 h1{margin:0;font-size:24px}.toolbar{position:sticky;top:76px;z-index:15;background:#f5f6f8;padding:8px 0}
 .search{width:100%;padding:14px 15px;border:1px solid #ddd;border-radius:14px;font-size:16px;background:#fff;outline:none}
@@ -29,16 +32,19 @@ h1{margin:0;font-size:24px}.toolbar{position:sticky;top:76px;z-index:15;backgrou
 .sendwa{width:100%;border:0;border-radius:13px;padding:14px;background:#16a34a;color:#fff;font-size:17px;font-weight:900}
 .config{background:#fff3cd;padding:10px;border-radius:10px;margin-bottom:10px;font-size:13px}
 @media(min-width:700px){.grid{grid-template-columns:repeat(4,1fr)}}
+
+.zoommodal{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.88);align-items:center;justify-content:center;padding:20px;cursor:zoom-out}.zoommodal.open{display:flex}.zoommodal img{max-width:96vw;max-height:90vh;width:auto;height:auto;object-fit:contain;border-radius:12px;box-shadow:0 8px 35px #0008}.closezoom{position:absolute;top:14px;right:16px;width:44px;height:44px;border:0;border-radius:50%;background:#fff;color:#111827;font-size:28px;font-weight:900;cursor:pointer}.product img{cursor:zoom-in}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1 id="business">White Pack</h1><div class="sub">Product Catalogue</div></div></header>
+<header><div class="wrap brand"><img src="logo.png" class="site-logo" alt="White Pack"><div><h1 id="business">White Pack</h1><div class="sub">Product Catalogue</div></div></div></header>
 <main class="wrap">
 
 <div class="toolbar"><input id="search" class="search" autocomplete="off" placeholder="🔍 Search products or categories..."></div>
 <section id="categories"><div class="title">Choose a Category</div><div id="categoryGrid" class="grid"></div></section>
 <section id="products" style="display:none"><button id="back" class="back">← All Categories</button><div id="categoryTitle" class="title"></div><div id="productGrid" class="grid"></div></section>
 </main>
+<div id="zoomModal" class="zoommodal" aria-hidden="true"><button id="closeZoom" class="closezoom" aria-label="Close">×</button><img id="zoomImage" src="" alt="Product image"></div>
 <button id="cartBar" class="cartbar">🛒 Order <span id="cartCount">0</span></button>
 <div id="cartModal" class="cartmodal"><div class="cartbox">
 <div class="carthead"><div>🛒 Your Order</div><button id="closeCart" class="closecart">✕</button></div>
@@ -47,10 +53,14 @@ h1{margin:0;font-size:24px}.toolbar{position:sticky;top:76px;z-index:15;backgrou
 <script>
 /* IMPORTANT: This URL is public. It contains NO admin password and the API never returns costPrice. */
 const API_URL="https://whitepack-api.chidiacch.workers.dev";
-let products=[],active="",cart=[];
+let products=[],active="",cart=[];try{cart=JSON.parse(localStorage.getItem("wpSecondCart")||"[]")}catch(e){cart=[]}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
-const catOrder=c=>{const n=Number(products.find(p=>String(p.category||"").trim()===String(c).trim()&&p.categoryOrder!==undefined)?.categoryOrder);return Number.isFinite(n)?n:999999};const prodOrder=p=>{const n=Number(p.sortOrder);return Number.isFinite(n)?n:999999};const cats=()=>[...new Set(products.map(p=>String(p.category||"").trim()).filter(Boolean))].sort((a,b)=>catOrder(a)-catOrder(b)||a.localeCompare(b));
+const norm=v=>String(v??"").trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
+const catKey=c=>norm(c);
+const catOrder=c=>{const vals=products.filter(p=>catKey(p.category)===catKey(c)).map(p=>Number(p.categoryOrder)).filter(Number.isFinite);return vals.length?Math.min(...vals):999999};
+const prodOrder=p=>{const n=Number(p.sortOrder);return Number.isFinite(n)?n:999999};
+const cats=()=>[...new Set(products.map(p=>catKey(p.category)).filter(Boolean))].sort((a,b)=>catOrder(a)-catOrder(b)||a.localeCompare(b));
 const photo=c=>products.find(p=>String(p.category||"").trim()===c&&p.photo)?.photo||"";
 function renderCats(){
  $("categories").style.display="block";$("products").style.display="none";const q=$("search").value.toLowerCase().trim();
@@ -59,35 +69,49 @@ function renderCats(){
  $("categoryGrid").innerHTML=html||'<div class="empty">No categories found.</div>';
  document.querySelectorAll(".category").forEach(b=>b.onclick=()=>openCat(b.dataset.c));
 }
-function openCat(c){active=c;$("search").value="";$("categories").style.display="none";$("products").style.display="block";$("categoryTitle").textContent=c;renderProducts();scrollTo(0,0)}
+function showCategory(c){active=c;$("search").value="";$("categories").style.display="none";$("products").style.display="block";$("categoryTitle").textContent=c;renderProducts();scrollTo(0,0)}
+function showHome(){active="";$("search").value="";$("categories").style.display="block";$("products").style.display="none";renderCats();scrollTo(0,0)}
+function openCat(c){showCategory(c);history.pushState({page:"category",category:c},"",location.pathname+location.search+"#category="+encodeURIComponent(c))}
 function renderProducts(){
  const q=$("search").value.toLowerCase().trim(),a=products.filter(p=>String(p.category||"").trim()===active&&`${p.name||""} ${p.description||""}`.toLowerCase().includes(q)).sort((a,b)=>prodOrder(a)-prodOrder(b));
- $("productGrid").innerHTML=a.length?a.map((p,i)=>`<article class="product"><img src="${esc(p.photo||"")}" loading="lazy" alt="${esc(p.name)}"><div class="body"><div class="name">${esc(p.name)}</div>${p.description?`<div class="desc">${esc(p.description)}</div>`:""}${p.price!==undefined&&p.price!==""?`<div class="price">$${esc(String(p.price).replace(/^\$/,""))}</div>`:""}<div class="qtyrow"><button class="qtybtn" onclick="changeQty(${i},-1)">−</button><div class="qty" id="q_${i}">1</div><button class="qtybtn" onclick="changeQty(${i},1)">+</button></div><button class="addbtn" onclick="addToCart(${i})">🛒 Add to Order</button></div></article>`).join(""):'<div class="empty">No products found.</div>';
+ $("productGrid").innerHTML=a.length?a.map((p,i)=>`<article class="product"><img src="${esc(p.photo||"")}" loading="lazy" alt="${esc(p.name)}" onclick="zoomProduct(this.src,this.alt)"><div class="body"><div class="name">${esc(p.name)}</div>${p.description?`<div class="desc">${esc(p.description)}</div>`:""}${p.price!==undefined&&p.price!==""?`<div class="price">$${esc(String(p.price).replace(/^\$/,""))}</div>`:""}<div class="qtyrow"><button class="qtybtn" onclick="changeQty(${i},-1)">−</button><div class="qty" id="q_${i}">1</div><button class="qtybtn" onclick="changeQty(${i},1)">+</button></div><button class="addbtn" onclick="addToCart(${i})">🛒 Add to Order</button></div></article>`).join(""):'<div class="empty">No products found.</div>';
 }
+function zoomProduct(src,alt="Product image"){if(!src)return;$("zoomImage").src=src;$("zoomImage").alt=alt;$("zoomModal").classList.add("open");$("zoomModal").setAttribute("aria-hidden","false");document.body.style.overflow="hidden"}function closeZoom(){$("zoomModal").classList.remove("open");$("zoomModal").setAttribute("aria-hidden","true");$("zoomImage").src="";document.body.style.overflow=""}$('closeZoom').onclick=e=>{e.stopPropagation();closeZoom()};$('zoomModal').onclick=e=>{if(e.target===$('zoomModal'))closeZoom()};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeZoom()});
 function changeQty(i,n){const el=$("q_"+i);el.textContent=Math.max(1,(parseInt(el.textContent)||1)+n)}
 function addToCart(i){const q=Math.max(1,parseInt($("q_"+i)?.textContent)||1),list=products.filter(p=>String(p.category||"").trim()===active&&`${p.name||""} ${p.description||""}`.toLowerCase().includes($("search").value.toLowerCase().trim())),p=list[i];if(!p)return;const key=String(p.id??p.barcode??p.name),found=cart.find(x=>x.key===key);if(found)found.qty+=q;else cart.push({key,p,qty:q});renderCart()}
-function renderCart(){const count=cart.reduce((s,x)=>s+x.qty,0);$("cartCount").textContent=count;if(!cart.length){$("cartItems").innerHTML='<div class="empty">Your order is empty.</div>';$("cartTotal").textContent="";return}
+function renderCart(){try{localStorage.setItem("wpSecondCart",JSON.stringify(cart))}catch(e){}const count=cart.reduce((s,x)=>s+x.qty,0);$("cartCount").textContent=count;if(!cart.length){$("cartItems").innerHTML='<div class="empty">Your order is empty.</div>';$("cartTotal").textContent="";return}
  $("cartItems").innerHTML=cart.map((x,i)=>`<div class="cartitem"><img src="${esc(x.p.photo||"")}"><div><div class="cartname">${esc(x.p.name)}</div><div class="cartprice">Quantity: ${x.qty}${x.p.price!==undefined&&x.p.price!==""?` · $${esc(String(x.p.price).replace(/^\$/,""))} each`:""}</div></div><button class="remove" onclick="removeCart(${i})">Remove</button></div>`).join("");
  const total=cart.reduce((s,x)=>s+(parseFloat(String(x.p.price??"").replace(/[^0-9.-]/g,""))||0)*x.qty,0);$("cartTotal").textContent=total>0?`Total: $${total.toFixed(2)}`:`${count} item${count===1?"":"s"}`}
 function removeCart(i){cart.splice(i,1);renderCart()}
 $("cartBar").onclick=()=>{$("cartModal").classList.add("open");renderCart()};$("closeCart").onclick=()=>$("cartModal").classList.remove("open");
 $("cartModal").onclick=e=>{if(e.target===$("cartModal"))$("cartModal").classList.remove("open")};
 $("sendWhatsApp").onclick=()=>{if(!cart.length){alert("Please add products first.");return}let msg="Hello White Pack, I would like to place this order:%0A%0A";cart.forEach((x,i)=>{const price=x.p.price!==undefined&&x.p.price!==""?` - $${String(x.p.price).replace(/^\$/,"")}`:"";msg+=`${i+1}. ${x.p.name} - Qty: ${x.qty}${price}%0A`});const total=cart.reduce((s,x)=>s+(parseFloat(String(x.p.price??"").replace(/[^0-9.-]/g,""))||0)*x.qty,0);if(total>0)msg+=`%0ATotal: $${total.toFixed(2)}`;window.open("https://wa.me/96181085811?text="+msg,"_blank")};
-$("search").oninput=()=>{$("products").style.display==="block"?renderProducts():renderCats()};$("back").onclick=()=>{active="";$("search").value="";renderCats();scrollTo(0,0)};
-async function load(){try{const r=await fetch(API_URL+"/api/products",{cache:"no-store"});if(!r.ok)throw 0;const d=await r.json();
-    const raw=Array.isArray(d.products)?d.products:[];
+$("search").oninput=()=>{$("products").style.display==="block"?renderProducts():renderCats()};
+$("back").onclick=()=>{if(history.state&&history.state.page==="category")history.back();else showHome()};
+window.addEventListener("popstate",()=>{const state=history.state;if(state&&state.page==="category"&&state.category)showCategory(state.category);else showHome()});
+async function load(){
+  try{
+    // Live catalogue source: Cloudflare public API.
+    // products.json is no longer used by the public index, so admin/API changes
+    // appear automatically without uploading another JSON file to GitHub.
+    const r=await fetch(API_URL+"/api/public/products",{cache:"no-store"});
+    if(!r.ok)throw new Error("Public catalogue API request failed.");
+    const d=await r.json();
+    const raw=Array.isArray(d)?d:(Array.isArray(d.products)?d.products:[]);
     const seen=new Set();
-    const norm=v=>String(v??"").toLowerCase().trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
-    products=raw.filter(p=>{
-      const key=p.id ? "id:"+String(p.id) :
-        p.barcode ? "barcode:"+norm(p.barcode) :
-        p.code ? "code:"+norm(p.code) :
-        "full:"+norm(p.name)+"||"+norm(p.category||"Products")+"||"+norm(p.description)+"||"+norm(p.price);
-      if(seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    const keyNorm=v=>String(v??"").toLowerCase().trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
+    products=raw.map(p=>({...p,category:keyNorm(p.category||"Products")||"Products"})).filter(p=>{
+      const key=p.id ? "id:"+String(p.id) : p.barcode ? "barcode:"+keyNorm(p.barcode) : p.code ? "code:"+keyNorm(p.code) : "full:"+keyNorm(p.name)+"||"+keyNorm(p.category)+"||"+keyNorm(p.description)+"||"+keyNorm(p.price);
+      if(seen.has(key)) return false; seen.add(key); return true;
     });
-    $("business").textContent=d.businessName||"White Pack";document.title=d.businessName||"Catalogue";renderCats()}catch(e){$("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable. Check the API URL and Worker deployment.</div>'}}
-renderCart();load();
+    $("business").textContent=d.businessName||"White Pack";
+    document.title=d.businessName||"Catalogue";
+    renderCats();
+  }catch(e){
+    $("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable. Please try again later.</div>';
+    console.error(e);
+  }
+}
+renderCart();history.replaceState({page:"home"},"",location.pathname+location.search);load();
 </script>
 </body></html>
