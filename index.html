@@ -37,7 +37,7 @@ h1{margin:0;font-size:24px}.toolbar{position:sticky;top:76px;z-index:15;backgrou
 </style>
 </head>
 <body>
-<header><div class="wrap brand"><img src="logo.png" class="site-logo" alt="White Pack"><div><h1 id="business">White Pack</h1><div class="sub">Product Catalogue</div></div></div></header>
+<header><div class="wrap brand"><img src="logo.png" class="site-logo" alt="White Pack" onerror="this.style.display='none'"><div><h1 id="business">White Pack</h1><div class="sub">Product Catalogue</div></div></div></header>
 <main class="wrap">
 
 <div class="toolbar"><input id="search" class="search" autocomplete="off" placeholder="🔍 Search products or categories..."></div>
@@ -90,26 +90,48 @@ $("search").oninput=()=>{$("products").style.display==="block"?renderProducts():
 $("back").onclick=()=>{if(history.state&&history.state.page==="category")history.back();else showHome()};
 window.addEventListener("popstate",()=>{const state=history.state;if(state&&state.page==="category"&&state.category)showCategory(state.category);else showHome()});
 async function load(){
-  try{
-    // Live catalogue source: Cloudflare public API.
-    // products.json is no longer used by the public index, so admin/API changes
-    // appear automatically without uploading another JSON file to GitHub.
-    const r=await fetch(API_URL+"/api/public/products",{cache:"no-store"});
-    if(!r.ok)throw new Error("Public catalogue API request failed.");
-    const d=await r.json();
+  const keyNorm=v=>String(v??"").toLowerCase().trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
+
+  async function applyData(d){
     const raw=Array.isArray(d)?d:(Array.isArray(d.products)?d.products:[]);
     const seen=new Set();
-    const keyNorm=v=>String(v??"").toLowerCase().trim().replace(/\s+/g," ").replace(/[\u200B-\u200D\uFEFF]/g,"");
     products=raw.map(p=>({...p,category:keyNorm(p.category||"Products")||"Products"})).filter(p=>{
       const key=p.id ? "id:"+String(p.id) : p.barcode ? "barcode:"+keyNorm(p.barcode) : p.code ? "code:"+keyNorm(p.code) : "full:"+keyNorm(p.name)+"||"+keyNorm(p.category)+"||"+keyNorm(p.description)+"||"+keyNorm(p.price);
-      if(seen.has(key)) return false; seen.add(key); return true;
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
-    $("business").textContent=d.businessName||"White Pack";
-    document.title=d.businessName||"Catalogue";
+    $("business").textContent=(Array.isArray(d)?null:d.businessName)||"White Pack";
+    document.title=(Array.isArray(d)?null:d.businessName)||"Catalogue";
     renderCats();
-  }catch(e){
-    $("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable. Please try again later.</div>';
-    console.error(e);
+  }
+
+  // 1) Try the live Cloudflare API first.
+  try{
+    const r=await fetch(API_URL+"/api/public/products",{cache:"no-store"});
+    if(!r.ok)throw new Error("Cloudflare API returned HTTP "+r.status);
+    const d=await r.json();
+    const raw=Array.isArray(d)?d:(Array.isArray(d.products)?d.products:[]);
+    if(!raw.length)throw new Error("Cloudflare API returned no products.");
+    await applyData(d);
+    return;
+  }catch(apiError){
+    console.warn("Live API unavailable. Trying products.json backup.",apiError);
+  }
+
+  // 2) Automatic GitHub backup: products.json.
+  try{
+    const r=await fetch("products.json?ts="+Date.now(),{cache:"no-store"});
+    if(!r.ok)throw new Error("products.json returned HTTP "+r.status);
+    const d=await r.json();
+    const raw=Array.isArray(d)?d:(Array.isArray(d.products)?d.products:[]);
+    if(!raw.length)throw new Error("products.json contains no products.");
+    await applyData(d);
+    console.info("Catalogue loaded from products.json backup.");
+    return;
+  }catch(jsonError){
+    console.error("Both Cloudflare API and products.json failed.",jsonError);
+    $("categoryGrid").innerHTML='<div class="empty">Catalogue unavailable.<br>Please try again later.</div>';
   }
 }
 renderCart();history.replaceState({page:"home"},"",location.pathname+location.search);load();
